@@ -1163,29 +1163,29 @@ func TestPathTraverser(t *testing.T) {
 			// Assumption: The order of elements visited matches the order in expectedElements
 			for i, element := range elementsVisited {
 				expected := (*expectedElements)[i]
-				if element.fileInfo.Name() != expected.name {
-					t.Fatalf("Expected element name %s, got %s", expected.name, element.fileInfo.Name())
+				if element.FileInfo.Name() != expected.name {
+					t.Fatalf("Expected element name %s, got %s", expected.name, element.FileInfo.Name())
 				}
-				if element.fileInfo.Mode() != expected.mode {
-					t.Fatalf("Expected element file mode %v, got %v", expected.mode, element.fileInfo.Mode())
+				if element.FileInfo.Mode() != expected.mode {
+					t.Fatalf("Expected element file mode %v, got %v", expected.mode, element.FileInfo.Mode())
 				}
-				if element.fileInfo.Size() != int64(expected.size) {
-					t.Fatalf("Expected element size %d, got %d", expected.size, element.fileInfo.Size())
+				if element.FileInfo.Size() != int64(expected.size) {
+					t.Fatalf("Expected element size %d, got %d", expected.size, element.FileInfo.Size())
 				}
 
-				if element.resolvedSymlinkInfo != nil {
+				if element.ResolvedSymlinkInfo != nil {
 					// We're processing a symlink, validate the symlink info itself first
 					if expected.target == nil {
 						t.Fatalf("Expected symlink target info is nil")
 					}
-					if element.resolvedSymlinkInfo.fileInfo.Name() != expected.target.name {
-						t.Fatalf("Expected symlink target name %s, got %s", expected.target.name, element.resolvedSymlinkInfo.fileInfo.Name())
+					if element.ResolvedSymlinkInfo.FileInfo.Name() != expected.target.name {
+						t.Fatalf("Expected symlink target name %s, got %s", expected.target.name, element.ResolvedSymlinkInfo.FileInfo.Name())
 					}
-					if element.resolvedSymlinkInfo.fileInfo.Mode() != expected.target.mode {
-						t.Fatalf("Expected symlink target file mode %v, got %v", expected.target.mode, element.resolvedSymlinkInfo.fileInfo.Mode())
+					if element.ResolvedSymlinkInfo.FileInfo.Mode() != expected.target.mode {
+						t.Fatalf("Expected symlink target file mode %v, got %v", expected.target.mode, element.ResolvedSymlinkInfo.FileInfo.Mode())
 					}
-					if element.resolvedSymlinkInfo.fileInfo.Size() != int64(expected.target.size) {
-						t.Fatalf("Expected symlink target size %d, got %d", expected.target.size, element.resolvedSymlinkInfo.fileInfo.Size())
+					if element.ResolvedSymlinkInfo.FileInfo.Size() != int64(expected.target.size) {
+						t.Fatalf("Expected symlink target size %d, got %d", expected.target.size, element.ResolvedSymlinkInfo.FileInfo.Size())
 					}
 				}
 			}

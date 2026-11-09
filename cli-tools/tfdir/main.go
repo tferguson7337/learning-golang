@@ -11,8 +11,6 @@ import (
 	"github.com/tferguson7337/learning-golang/tfutils"
 )
 
-const DefaultDepth uint = 0
-const DefaultTraverseSymlinks bool = false
 
 func printHeader(path string) {
 	fmt.Printf("\n%v\n", path)
@@ -27,12 +25,12 @@ func main() {
 	log.Default().SetOutput(os.Stderr)
 
 	// Setup flags
-	recursionDepth := DefaultDepth
+	recursionDepth := uint(0)
 	var excludeRegex *regexp.Regexp
-	traverseSymlinks := DefaultTraverseSymlinks
-	flag.UintVar(&recursionDepth, "depth", DefaultDepth, "Recursion depth for directory traversal. 0 means no recursion")
-	flag.BoolVar(&traverseSymlinks, "symlinks", DefaultTraverseSymlinks, "Whether to traverse symlinks to directories")
-	flag.Func("exclude", "Regex pattern for excluding files or directories", func(s string) error {
+	traverseSymlinks := false
+	flag.UintVar(&recursionDepth, "depth", 0, "Recursion depth for directory traversal. 0 means no recursion. Default is 0")
+	flag.BoolVar(&traverseSymlinks, "symlinks", false, "Whether to traverse directory symlinks. Default is false")
+	flag.Func("exclude", "Regex pattern for excluding files or directories. Default is none", func(s string) error {
 		var err error
 		excludeRegex, err = regexp.Compile(s)
 		if err != nil {

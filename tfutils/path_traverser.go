@@ -11,13 +11,14 @@ import (
 )
 
 type TFResolvedSymlinkInfo struct {
-	fileInfo fs.FileInfo
-	absPath  string
+	FileInfo fs.FileInfo
+	AbsPath  *string
 }
 
 type TFFileInfo struct {
-	fileInfo            fs.FileInfo
-	resolvedSymlinkInfo *TFResolvedSymlinkInfo
+	FileInfo            fs.FileInfo
+	AbsPath             *string
+	ResolvedSymlinkInfo *TFResolvedSymlinkInfo
 }
 
 func NewTFFileInfo(fi fs.FileInfo, absPath *string, excludePattern *regexp.Regexp) *TFFileInfo {
@@ -27,7 +28,7 @@ func NewTFFileInfo(fi fs.FileInfo, absPath *string, excludePattern *regexp.Regex
 		return nil
 	}
 
-	tffi := TFFileInfo{fileInfo: fi, resolvedSymlinkInfo: nil}
+	tffi := TFFileInfo{FileInfo: fi, AbsPath: absPath, ResolvedSymlinkInfo: nil}
 	if fi.Mode()&os.ModeSymlink != 0 {
 		symlinkAbsPath, err := filepath.EvalSymlinks(*absPath)
 		if err != nil {
@@ -46,40 +47,40 @@ func NewTFFileInfo(fi fs.FileInfo, absPath *string, excludePattern *regexp.Regex
 			return nil
 		}
 
-		tffi.resolvedSymlinkInfo = &TFResolvedSymlinkInfo{
-			fileInfo: resolvedSymlinkFileInfo,
-			absPath:  symlinkAbsPath}
+		tffi.ResolvedSymlinkInfo = &TFResolvedSymlinkInfo{
+			FileInfo: resolvedSymlinkFileInfo,
+			AbsPath:  &symlinkAbsPath}
 	}
 	return &tffi
 }
 
 func (tffi TFFileInfo) String() string {
 	var sizeString string
-	if tffi.resolvedSymlinkInfo == nil {
+	if tffi.ResolvedSymlinkInfo == nil {
 		// Non-symlink: [drwx mask] [size] [mod date+time] [name]
-		if !tffi.fileInfo.IsDir() {
-			sizeString = NewScaledByteInfo(uint64(tffi.fileInfo.Size()), Byte).String()
+		if !tffi.FileInfo.IsDir() {
+			sizeString = NewScaledByteInfo(uint64(tffi.FileInfo.Size()), Byte).String()
 		}
 		return fmt.Sprintf(
 			"%10v  %10v  %v  %v",
-			tffi.fileInfo.Mode(),
+			tffi.FileInfo.Mode(),
 			sizeString,
-			tffi.fileInfo.ModTime().Format(time.DateTime),
-			tffi.fileInfo.Name())
+			tffi.FileInfo.ModTime().Format(time.DateTime),
+			tffi.FileInfo.Name())
 	}
 
-	if !tffi.resolvedSymlinkInfo.fileInfo.IsDir() {
-		sizeString = NewScaledByteInfo(uint64(tffi.resolvedSymlinkInfo.fileInfo.Size()), Byte).String()
+	if !tffi.ResolvedSymlinkInfo.FileInfo.IsDir() {
+		sizeString = NewScaledByteInfo(uint64(tffi.ResolvedSymlinkInfo.FileInfo.Size()), Byte).String()
 	}
 
 	// Symlink: [original drwx mask] [target size] [target mod date+time] [link name] [[target name]]
 	return fmt.Sprintf(
 		"%10v  %10v  %v  %v  [%v]",
-		tffi.fileInfo.Mode(),
+		tffi.FileInfo.Mode(),
 		sizeString,
-		tffi.resolvedSymlinkInfo.fileInfo.ModTime().Format(time.DateTime),
-		tffi.fileInfo.Name(),
-		tffi.resolvedSymlinkInfo.absPath)
+		tffi.ResolvedSymlinkInfo.FileInfo.ModTime().Format(time.DateTime),
+		tffi.FileInfo.Name(),
+		*tffi.ResolvedSymlinkInfo.AbsPath)
 }
 
 type VisitAbsRootFunc func(path string)
@@ -131,8 +132,8 @@ func (pt *PathTraverser) traverseImpl(visitedDirSet *map[string]struct{}) {
 		pt.VisitAbsRoot(pt.AbsRootPath)
 	}
 
-	rootIsDir := tffi.fileInfo.IsDir()
-	rootIsTargetDir := tffi.resolvedSymlinkInfo != nil && tffi.resolvedSymlinkInfo.fileInfo.IsDir()
+	rootIsDir := tffi.FileInfo.IsDir()
+	rootIsTargetDir := tffi.ResolvedSymlinkInfo != nil && tffi.ResolvedSymlinkInfo.FileInfo.IsDir()
 	if !rootIsDir && (!rootIsTargetDir || !pt.TraverseSymlinks) {
 		// Single-file traversal - process now and bail out
 		if pt.VisitDirElement != nil {
@@ -188,7 +189,7 @@ func (pt *PathTraverser) traverseImpl(visitedDirSet *map[string]struct{}) {
 		}
 
 		if !entryFileInfo.IsDir() &&
-			!(tffi.resolvedSymlinkInfo != nil && tffi.resolvedSymlinkInfo.fileInfo.IsDir()) {
+			!(tffi.ResolvedSymlinkInfo != nil && tffi.ResolvedSymlinkInfo.FileInfo.IsDir()) {
 			// We're not dealing with a directory - skip further processing for this element
 			continue
 		}
@@ -200,16 +201,16 @@ func (pt *PathTraverser) traverseImpl(visitedDirSet *map[string]struct{}) {
 
 		// Add the directory (or resolved symlink) to the visited set to avoid revisiting it
 		// Also add the directory to the subDirs list for further recursion
-		if tffi.resolvedSymlinkInfo != nil {
+		if tffi.ResolvedSymlinkInfo != nil {
 			if !pt.TraverseSymlinks {
 				// We're not traversing symlinks, so skip this entry
 				continue
 			}
-			if _, visited := (*visitedDirSet)[tffi.resolvedSymlinkInfo.absPath]; visited {
+			if _, visited := (*visitedDirSet)[*tffi.ResolvedSymlinkInfo.AbsPath]; visited {
 				continue
 			}
-			(*visitedDirSet)[tffi.resolvedSymlinkInfo.absPath] = struct{}{}
-			subDirs = append(subDirs, tffi.resolvedSymlinkInfo.absPath)
+			(*visitedDirSet)[*tffi.ResolvedSymlinkInfo.AbsPath] = struct{}{}
+			subDirs = append(subDirs, *tffi.ResolvedSymlinkInfo.AbsPath)
 		} else {
 			if _, visited := (*visitedDirSet)[entryAbsPath]; visited {
 				continue

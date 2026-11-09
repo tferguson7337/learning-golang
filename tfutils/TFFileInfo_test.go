@@ -74,13 +74,13 @@ func TestNewTFFileInfo(t *testing.T) {
 	if tfTestDirInfo == nil {
 		t.Fatal("Received nil test dir info")
 	}
-	if tfTestDirInfo.fileInfo != testDirInfo {
+	if tfTestDirInfo.FileInfo != testDirInfo {
 		t.Fatalf(
-			"tfTestDirInfo.fileInfo does not match os.FileInfo:\n`%v`\n`%v`",
-			tfTestDirInfo.fileInfo,
+			"tfTestDirInfo.FileInfo does not match os.FileInfo:\n`%v`\n`%v`",
+			tfTestDirInfo.FileInfo,
 			testDirInfo)
 	}
-	if tfTestDirInfo.resolvedSymlinkInfo != nil {
+	if tfTestDirInfo.ResolvedSymlinkInfo != nil {
 		t.Fatal("tfTestDirInfo contains non-nil symlink info")
 	}
 
@@ -94,13 +94,13 @@ func TestNewTFFileInfo(t *testing.T) {
 	if tfTestFileInfo == nil {
 		t.Fatal("Failed to get TFFileInfo for test file")
 	}
-	if !reflect.DeepEqual(tfTestFileInfo.fileInfo, *testFileInfo) {
+	if !reflect.DeepEqual(tfTestFileInfo.FileInfo, *testFileInfo) {
 		t.Fatalf(
-			"tfTestFileInfo.fileInfo does not match fs.FileInfo:\n`%v`\n`%v`",
-			tfTestFileInfo.fileInfo,
+			"tfTestFileInfo.FileInfo does not match fs.FileInfo:\n`%v`\n`%v`",
+			tfTestFileInfo.FileInfo,
 			*testFileInfo)
 	}
-	if tfTestFileInfo.resolvedSymlinkInfo != nil {
+	if tfTestFileInfo.ResolvedSymlinkInfo != nil {
 		t.Fatal("tfTestFileInfo contains non-nil symlink info")
 	}
 
@@ -118,25 +118,25 @@ func TestNewTFFileInfo(t *testing.T) {
 	if tfTestSymlinkInfo == nil {
 		t.Fatal("Failed to get TFFileInfo for symlink")
 	}
-	if !reflect.DeepEqual(tfTestSymlinkInfo.fileInfo, *testSymlinkInfo) {
+	if !reflect.DeepEqual(tfTestSymlinkInfo.FileInfo, *testSymlinkInfo) {
 		t.Fatalf(
-			"tfTestSymlinkInfo.fileInfo does not match fs.FileInfo:\n`%v`\n`%v`",
-			tfTestSymlinkInfo.fileInfo,
+			"tfTestSymlinkInfo.FileInfo does not match fs.FileInfo:\n`%v`\n`%v`",
+			tfTestSymlinkInfo.FileInfo,
 			*testSymlinkInfo)
 	}
-	if tfTestSymlinkInfo.resolvedSymlinkInfo == nil {
+	if tfTestSymlinkInfo.ResolvedSymlinkInfo == nil {
 		t.Fatal("tfTestSymlinkInfo is missing target info")
 	}
-	if tfTestSymlinkInfo.resolvedSymlinkInfo.absPath != *testFileAbsPath {
+	if *tfTestSymlinkInfo.ResolvedSymlinkInfo.AbsPath != *testFileAbsPath {
 		t.Fatalf(
 			"Symlink's target path does not match original:\n`%v`\n`%v`",
-			tfTestSymlinkInfo.resolvedSymlinkInfo.absPath,
+			*tfTestSymlinkInfo.ResolvedSymlinkInfo.AbsPath,
 			*testFileAbsPath)
 	}
-	if !reflect.DeepEqual(tfTestSymlinkInfo.resolvedSymlinkInfo.fileInfo, *testFileInfo) {
+	if !reflect.DeepEqual(tfTestSymlinkInfo.ResolvedSymlinkInfo.FileInfo, *testFileInfo) {
 		t.Fatalf(
 			"Symlink target's file info does not match original:\n`%v`\n`%v`",
-			tfTestSymlinkInfo.resolvedSymlinkInfo.fileInfo,
+			tfTestSymlinkInfo.ResolvedSymlinkInfo.FileInfo,
 			*testFileInfo)
 	}
 }
@@ -158,9 +158,9 @@ func TestTFFileInfoString(t *testing.T) {
 		// [drwx mask] [size] [mod date+time] [name]
 		fmt.Sprintf(
 			`%v\s+%v\s+%v\s+%v`,
-			tfTestFileInfo.fileInfo.Mode(),
-			NewScaledByteInfo(uint64(tfTestFileInfo.fileInfo.Size()), Byte).String(),
-			tfTestFileInfo.fileInfo.ModTime().Format(time.DateTime),
+			tfTestFileInfo.FileInfo.Mode(),
+			NewScaledByteInfo(uint64(tfTestFileInfo.FileInfo.Size()), Byte).String(),
+			tfTestFileInfo.FileInfo.ModTime().Format(time.DateTime),
 			testFileName))
 	tfTestFileInfoStr := tfTestFileInfo.String()
 	if !testFileRegex.MatchString(tfTestFileInfoStr) {
@@ -191,16 +191,16 @@ func TestTFFileInfoString(t *testing.T) {
 	if tfTestSymlinkFileInfo == nil {
 		t.Fatal("Received nil TFFileInfo for symlink")
 	}
-	if tfTestSymlinkFileInfo.resolvedSymlinkInfo == nil {
-		t.Fatal("Received nil TFFileInfo.resolvedSymlinkInfo")
+	if tfTestSymlinkFileInfo.ResolvedSymlinkInfo == nil {
+		t.Fatal("Received nil TFFileInfo.ResolvedSymlinkInfo")
 	}
 
 	// [original drwx mask] [target size] [target mod date+time] [name] [target abs path]
 	testSymlinkRegexStr := fmt.Sprintf(
 		`%v\s+%v\s+%v\s+%v\s+\[%v\]`,
-		tfTestSymlinkFileInfo.fileInfo.Mode(),
-		NewScaledByteInfo(uint64(tfTestSymlinkFileInfo.resolvedSymlinkInfo.fileInfo.Size()), Byte).String(),
-		tfTestSymlinkFileInfo.resolvedSymlinkInfo.fileInfo.ModTime().Format(time.DateTime),
+		tfTestSymlinkFileInfo.FileInfo.Mode(),
+		NewScaledByteInfo(uint64(tfTestSymlinkFileInfo.ResolvedSymlinkInfo.FileInfo.Size()), Byte).String(),
+		tfTestSymlinkFileInfo.ResolvedSymlinkInfo.FileInfo.ModTime().Format(time.DateTime),
 		testSymlinkName,
 		strings.ReplaceAll(*testTargetAbsPath, `\`, `\\`))
 	testSymlinkRegex := regexp.MustCompile(testSymlinkRegexStr)
