@@ -992,25 +992,21 @@ func TestPathTraverser(t *testing.T) {
 			if len(elementsVisited) != len(*expectedElements) {
 				t.Fatalf("Expected %d elements visited, got %d", len(*expectedElements), len(elementsVisited))
 			}
-			// Assumption: The order of elements visited matches the order in expectedElementsVisited
+			// Assumption: The order of elements visited matches the order in expectedElements
 			for i, element := range elementsVisited {
 				expected := (*expectedElements)[i]
+				if element.fileInfo.Name() != expected.name {
+					t.Fatalf("Expected element name %s, got %s", expected.name, element.fileInfo.Name())
+				}
+				if element.fileInfo.Mode() != expected.mode {
+					t.Fatalf("Expected element file mode %v, got %v", expected.mode, element.fileInfo.Mode())
+				}
+				if element.fileInfo.Size() != int64(expected.size) {
+					t.Fatalf("Expected element size %d, got %d", expected.size, element.fileInfo.Size())
+				}
+
 				if element.resolvedSymlinkInfo != nil {
 					// We're processing a symlink, validate the symlink info itself first
-					if expected.target == nil {
-						t.Fatalf("Expected symlink target info is nil")
-					}
-					if element.fileInfo.Name() != expected.name {
-						t.Fatalf("Expected symlink name %s, got %s", expected.name, element.fileInfo.Name())
-					}
-					if element.fileInfo.Mode() != expected.mode {
-						t.Fatalf("Expected symlink mode %v, got %v", expected.mode, element.fileInfo.Mode())
-					}
-					if element.fileInfo.Size() != int64(expected.size) {
-						t.Fatalf("Expected symlink size %d, got %d", expected.size, element.fileInfo.Size())
-					}
-
-					// Next, validate the target file info of the symlink
 					if expected.target == nil {
 						t.Fatalf("Expected symlink target info is nil")
 					}
@@ -1022,16 +1018,6 @@ func TestPathTraverser(t *testing.T) {
 					}
 					if element.resolvedSymlinkInfo.fileInfo.Size() != int64(expected.target.size) {
 						t.Fatalf("Expected symlink target size %d, got %d", expected.target.size, element.resolvedSymlinkInfo.fileInfo.Size())
-					}
-				} else {
-					if element.fileInfo.Name() != expected.name {
-						t.Fatalf("Expected element name %s, got %s", expected.name, element.fileInfo.Name())
-					}
-					if element.fileInfo.Mode() != expected.mode {
-						t.Fatalf("Expected element file mode %v, got %v", expected.mode, element.fileInfo.Mode())
-					}
-					if element.fileInfo.Size() != int64(expected.size) {
-						t.Fatalf("Expected element size %d, got %d", expected.size, element.fileInfo.Size())
 					}
 				}
 			}
