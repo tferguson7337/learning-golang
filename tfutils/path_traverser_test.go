@@ -1,8 +1,10 @@
-package main
+package tfutils
 
 import (
 	"errors"
 	"fmt"
+	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -17,14 +19,14 @@ type TestFileInfo struct {
 }
 
 type ExpectedRootInfo struct {
-	name string // name of the dir
-	visitDueToSymlink bool // indicates if the root was visited due to a symlink, enables skipping check 
+	name              string // name of the dir
+	visitDueToSymlink bool   // indicates if the root was visited due to a symlink, enables skipping check
 }
 
 type ExpectedTestFileInfo struct {
-	name string      // name of the file or directory
-	mode os.FileMode // file mode (permissions, dir or symlink)
-	size int         // size of the file, 0 for directories and symlinks
+	name   string                // name of the file or directory
+	mode   os.FileMode           // file mode (permissions, dir or symlink)
+	size   int                   // size of the file, 0 for directories and symlinks
 	target *ExpectedTestFileInfo // target of the symlink, empty for non-symlinks
 }
 
@@ -108,8 +110,10 @@ func filterExpectedRoots(
 }
 
 func TestPathTraverser(t *testing.T) {
+	symlinkSupported := true
 	tests := []struct {
-		name string
+		name            string
+		requiresSymlink bool // Marks whether test cannot run _at all_ without symlink support
 
 		// Traverser input parameters
 		traverserFileName string // Only used in single file tests, otherwise t.TempDir() is used as root
@@ -121,21 +125,21 @@ func TestPathTraverser(t *testing.T) {
 		dirStructure map[string][]TestFileInfo // (t.TempDir subdirectory -> list of filenames in that subdirectory)
 
 		// Expected elements visited
-		expectedRootsVisited    []ExpectedRootInfo
-		expectedElementsVisitedNoSymlinkChecks *[]ExpectedTestFileInfo
+		expectedRootsVisited                     []ExpectedRootInfo
+		expectedElementsVisitedNoSymlinkChecks   *[]ExpectedTestFileInfo
 		expectedElementsVisitedWithSymlinkChecks *[]ExpectedTestFileInfo
 	}{
 		// TODO: Define test cases
 		// - Empty dir
 		{
-			name:                    "Empty dir",
-			traverserFileName:       "",
-			recursionDepth:          0,
-			exclusionPattern:        nil,
-			traverseSymlinks:        false,
-			dirStructure:            map[string][]TestFileInfo{},
-			expectedRootsVisited:    []ExpectedRootInfo{{name: ""}}, // "" for t.TempDir
-			expectedElementsVisitedNoSymlinkChecks: &[]ExpectedTestFileInfo{},
+			name:                                     "Empty dir",
+			traverserFileName:                        "",
+			recursionDepth:                           0,
+			exclusionPattern:                         nil,
+			traverseSymlinks:                         false,
+			dirStructure:                             map[string][]TestFileInfo{},
+			expectedRootsVisited:                     []ExpectedRootInfo{{name: ""}}, // "" for t.TempDir
+			expectedElementsVisitedNoSymlinkChecks:   &[]ExpectedTestFileInfo{},
 			expectedElementsVisitedWithSymlinkChecks: &[]ExpectedTestFileInfo{},
 		},
 
@@ -167,6 +171,162 @@ func TestPathTraverser(t *testing.T) {
 				{
 					name: "file.txt",
 					mode: 0666,
+				},
+			},
+		},
+
+		// - Direct file, excluded
+		{
+			name:              "Direct file, excluded",
+			traverserFileName: "file.txt",
+			recursionDepth:    0,
+			exclusionPattern:  regexp.MustCompile(`file\.txt$`),
+			traverseSymlinks:  false,
+			dirStructure: map[string][]TestFileInfo{
+				"": {
+					{
+						name: "file.txt",
+						mode: 0666,
+					},
+				},
+			},
+			expectedRootsVisited:                     []ExpectedRootInfo{},
+			expectedElementsVisitedNoSymlinkChecks:   &[]ExpectedTestFileInfo{},
+			expectedElementsVisitedWithSymlinkChecks: &[]ExpectedTestFileInfo{},
+		},
+
+		// - Direct symlink-to-file, no recursion/traverse
+		{
+			name:              "Direct symlink-to-file, no recursion/traverse",
+			requiresSymlink:   true,
+			traverserFileName: "file-symlink",
+			recursionDepth:    0,
+			exclusionPattern:  nil,
+			traverseSymlinks:  false,
+			dirStructure: map[string][]TestFileInfo{
+				"": {
+					{
+						name:    "file-symlink",
+						mode:    0777 | os.ModeSymlink,
+						content: "subdir\\file.txt",
+					},
+				},
+				"subdir": {
+					{
+						name: "file.txt",
+						mode: 0666,
+					},
+				},
+			},
+			expectedRootsVisited: []ExpectedRootInfo{
+				{name: "file-symlink"},
+			},
+			expectedElementsVisitedNoSymlinkChecks: &[]ExpectedTestFileInfo{},
+			expectedElementsVisitedWithSymlinkChecks: &[]ExpectedTestFileInfo{
+				{
+					name: "file-symlink",
+					mode: 0666 | os.ModeSymlink,
+					size: 0,
+					target: &ExpectedTestFileInfo{
+						name: "file.txt",
+						mode: 0666,
+						size: 0,
+					},
+				},
+			},
+		},
+
+		// - Direct symlink-to-dir, no recursion/traverse
+		{
+			name:              "Direct symlink-to-dir, no recursion/traverse",
+			requiresSymlink:   true,
+			traverserFileName: "dir-symlink",
+			recursionDepth:    0,
+			exclusionPattern:  nil,
+			traverseSymlinks:  false,
+			dirStructure: map[string][]TestFileInfo{
+				"": {
+					{
+						name:    "dir-symlink",
+						mode:    0777 | os.ModeSymlink,
+						content: "subdir",
+					},
+				},
+				"subdir": {
+					{
+						name: "file.txt",
+						mode: 0666,
+					},
+				},
+			},
+			expectedRootsVisited: []ExpectedRootInfo{
+				{name: "dir-symlink"}, // The symlink itself is visited as the root, similar to direct-file scenario
+			},
+			expectedElementsVisitedNoSymlinkChecks: &[]ExpectedTestFileInfo{},
+			expectedElementsVisitedWithSymlinkChecks: &[]ExpectedTestFileInfo{
+				{
+					name: "dir-symlink",
+					mode: 0666 | os.ModeSymlink,
+					size: 0,
+					target: &ExpectedTestFileInfo{
+						name: "subdir",
+						mode: 0777 | os.ModeDir,
+						size: 0,
+					},
+				},
+			},
+		},
+
+		// Direct symlink-to-dir, with recursion and traverse symlinks enabled
+		{
+			name:              "Direct symlink-to-dir, with recursion and traverse symlinks enabled",
+			requiresSymlink:   true,
+			traverserFileName: "dir-symlink",
+			recursionDepth:    1,
+			exclusionPattern:  nil,
+			traverseSymlinks:  true,
+			dirStructure: map[string][]TestFileInfo{
+				"": {
+					{
+						name:    "dir-symlink",
+						mode:    0777 | os.ModeSymlink,
+						content: "subdir1\\subdir2",
+					},
+				},
+				"subdir1": {},
+				"subdir1\\subdir2": {
+					{
+						name: "file.txt",
+						mode: 0666,
+					},
+				},
+			},
+			expectedRootsVisited: []ExpectedRootInfo{
+				{name: "dir-symlink"},
+				{name: "subdir1\\subdir2", visitDueToSymlink: true},
+			},
+			expectedElementsVisitedNoSymlinkChecks: &[]ExpectedTestFileInfo{
+				{
+					name: "subdir1",
+					mode: 0777 | os.ModeDir,
+					size: 0,
+				},
+			},
+			expectedElementsVisitedWithSymlinkChecks: &[]ExpectedTestFileInfo{
+				{
+					name: "dir-symlink",
+					mode: 0666 | os.ModeSymlink,
+					size: 0,
+					target: &ExpectedTestFileInfo{
+						name: "subdir2",
+						mode: 0777 | os.ModeDir,
+						size: 0,
+					},
+				},
+				{
+					name: "file.txt",
+					mode: 0666,
+					size: 0,
 				},
 			},
 		},
@@ -643,7 +803,7 @@ func TestPathTraverser(t *testing.T) {
 		// Infinite loop due to symlink-to-dir pointing back to original root directory
 		// Note: case ensures we don't "infinitely" recurse due to symlink loops
 		{
-			name:	"Infinite loop due to symlink-to-dir",
+			name:              "Infinite loop due to symlink-to-dir",
 			traverserFileName: "",
 			recursionDepth:    10,
 			exclusionPattern:  nil,
@@ -651,22 +811,22 @@ func TestPathTraverser(t *testing.T) {
 			dirStructure: map[string][]TestFileInfo{
 				"": {
 					{
-						name: "file1.txt",
-						mode: 0444,
+						name:    "file1.txt",
+						mode:    0444,
 						content: "file1 content",
 					},
 				},
-				"subdir1": { 
+				"subdir1": {
 					{
-						name: "file2.txt",
-						mode: 0666,
+						name:    "file2.txt",
+						mode:    0666,
 						content: "file2 content",
 					},
 				},
 				"subdir1\\subdir2": {
 					{
-						name: "symlink-to-subdir1",
-						mode: 0666 | os.ModeSymlink,
+						name:    "symlink-to-subdir1",
+						mode:    0666 | os.ModeSymlink,
 						content: "subdir1", // link back to root parent directory
 					},
 				},
@@ -773,8 +933,8 @@ func TestPathTraverser(t *testing.T) {
 					},
 				},
 			},
-			expectedRootsVisited: []ExpectedRootInfo{},
-			expectedElementsVisitedNoSymlinkChecks: &[]ExpectedTestFileInfo{},
+			expectedRootsVisited:                     []ExpectedRootInfo{},
+			expectedElementsVisitedNoSymlinkChecks:   &[]ExpectedTestFileInfo{},
 			expectedElementsVisitedWithSymlinkChecks: &[]ExpectedTestFileInfo{},
 		},
 
@@ -942,7 +1102,6 @@ func TestPathTraverser(t *testing.T) {
 				},
 			},
 		},
-
 	}
 
 	for _, test := range tests {
@@ -953,6 +1112,15 @@ func TestPathTraverser(t *testing.T) {
 			err, skipSymlinkChecks := buildTestFSLayout(t, &tempDir, &test.dirStructure)
 			if err != nil {
 				t.Fatalf("Failed to build test FS layout: %v", err)
+			}
+
+			// Flip killswitch on symlink support based on the test FS layout
+			if skipSymlinkChecks {
+				symlinkSupported = false
+			}
+
+			if !symlinkSupported && test.requiresSymlink {
+				t.Skip("Skipping test because symlinks are not supported")
 			}
 
 			rootsVisited := []string{}
@@ -1022,5 +1190,30 @@ func TestPathTraverser(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestPathTraverserInvalidPath(t *testing.T) {
+	visitInvoked := false
+	visitAbsRoot := func(root string) {
+		visitInvoked = true
+	}
+	visitElement := func(element *TFFileInfo) {
+		visitInvoked = true
+	}
+
+	// Suppress log output for this test since we expect errors for the invalid path
+	log.SetOutput(io.Discard)
+	defer log.SetOutput(os.Stderr)
+
+	NewPathTraverser(
+		"invalid-test-path",
+		0,
+		nil,
+		false,
+		visitAbsRoot,
+		visitElement).Traverse()
+	if visitInvoked {
+		t.Fatal("One or more visitor functions were invoked for an invalid path")
 	}
 }

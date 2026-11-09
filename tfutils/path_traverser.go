@@ -1,4 +1,4 @@
-package main
+package tfutils
 
 import (
 	"fmt"
@@ -112,45 +112,66 @@ func NewPathTraverser(
 }
 
 func (pt *PathTraverser) traverseImpl(visitedDirSet *map[string]struct{}) {
-	if pt.ExcludePattern != nil && pt.ExcludePattern.MatchString(pt.AbsRootPath) {
+	absPathFileInfo, err := os.Lstat(pt.AbsRootPath)
+	if err != nil {
+		log.Printf("Failed to stat root path: %v\n", err)
 		return
 	}
 
+	// Determine if this is a single-file traversal (i.e., the root path is a file, not a directory)
+	// Need to also handle symlink-to-file case.
+	tffi := NewTFFileInfo(absPathFileInfo, &pt.AbsRootPath, pt.ExcludePattern)
+	if tffi == nil {
+		// Error or excluded by pattern - skip further processing for this root path
+		return
+	}
+
+	// We were able to get file info, so appears valid enough - mark root as visited.
 	if pt.VisitAbsRoot != nil {
 		pt.VisitAbsRoot(pt.AbsRootPath)
 	}
 
-	if absPathFileInfo, err := os.Stat(pt.AbsRootPath); err != nil {
-		log.Printf("Failed to stat root path: %v\n", err)
+	rootIsDir := tffi.fileInfo.IsDir()
+	rootIsTargetDir := tffi.resolvedSymlinkInfo != nil && tffi.resolvedSymlinkInfo.fileInfo.IsDir()
+	if !rootIsDir && (!rootIsTargetDir || !pt.TraverseSymlinks) {
+		// Single-file traversal - process now and bail out
+		if pt.VisitDirElement != nil {
+			pt.VisitDirElement(tffi)
+		}
 		return
-	} else {
-		// Determine if this is a single-file traversal (i.e., the root path is a file, not a directory)
-		// Need to also handle symlink-to-file case.
-		tffi := NewTFFileInfo(absPathFileInfo, &pt.AbsRootPath, pt.ExcludePattern)
-		if tffi == nil {
-			// Error or excluded by pattern - skip further processing for this root path
-			return
-		}
-		if !tffi.fileInfo.IsDir() && (tffi.resolvedSymlinkInfo == nil || !tffi.resolvedSymlinkInfo.fileInfo.IsDir()) {
-			// Single-file traversal - process now and bail out
-			if pt.VisitDirElement != nil {
-				pt.VisitDirElement(tffi)
-			}
-			return
-		}
 	}
 
-	entries, err := os.ReadDir(pt.AbsRootPath)
-	if err != nil {
-		log.Printf("Failed to read directory entries: %v\n", err)
-		return
+	var entries []string
+	absRootPath := &pt.AbsRootPath
+	if rootIsDir {
+		absRootFile, err := os.Open(*absRootPath)
+		if err != nil {
+			log.Printf("Failed to open directory: %v\n", err)
+			return
+		}
+
+		entries, err = absRootFile.Readdirnames(-1)
+		absRootFile.Close()
+		if err != nil {
+			log.Printf("Failed to read dir names: %v\n", err)
+			return
+		}
+	} else {
+		// The provided root path is a symlink-to-dir
+		// We'll treat this as a bit of a hybrid case:
+		// - We'll start treating the directory containing the symlink as the new root
+		// - We'll add the symlink itself as the only entry to process within that directory
+		// - We'll then recurse into this directory as usual, if TraverseSymlinks and recursion depth allows
+		absRootPathStr, entry := filepath.Split(pt.AbsRootPath)
+		absRootPath = &absRootPathStr
+		entries = append(entries, entry)
 	}
 
 	subDirs := []string{}
 	for _, entry := range entries {
-		entryAbsPath := filepath.Join(pt.AbsRootPath, entry.Name())
+		entryAbsPath := filepath.Join(*absRootPath, entry)
 
-		entryFileInfo, err := entry.Info()
+		entryFileInfo, err := os.Lstat(entryAbsPath)
 		if err != nil {
 			log.Printf("Failed to get info for directory element - %v %v\n", err, entryAbsPath)
 			continue
@@ -180,6 +201,10 @@ func (pt *PathTraverser) traverseImpl(visitedDirSet *map[string]struct{}) {
 		// Add the directory (or resolved symlink) to the visited set to avoid revisiting it
 		// Also add the directory to the subDirs list for further recursion
 		if tffi.resolvedSymlinkInfo != nil {
+			if !pt.TraverseSymlinks {
+				// We're not traversing symlinks, so skip this entry
+				continue
+			}
 			if _, visited := (*visitedDirSet)[tffi.resolvedSymlinkInfo.absPath]; visited {
 				continue
 			}

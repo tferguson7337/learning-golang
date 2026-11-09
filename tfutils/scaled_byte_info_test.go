@@ -1,4 +1,4 @@
-package main
+package tfutils
 
 import "testing"
 
@@ -12,6 +12,14 @@ func TestScaledByteInfo(t *testing.T) {
 		expectedUnit   ByteUnit
 		expectedString string
 	}{
+		{
+			name:           "Invalid byte unit",
+			size:           1024,
+			unit:           ByteUnit(255),
+			expectedSize:   1024,
+			expectedUnit:   ByteUnit(255),
+			expectedString: "1024.00???",
+		},
 		{
 			name:           "Zero byte",
 			size:           0,

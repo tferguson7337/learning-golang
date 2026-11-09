@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+
+	"github.com/tferguson7337/learning-golang/tfutils"
 )
 
 const DefaultDepth uint = 0
@@ -17,7 +19,7 @@ func printHeader(path string) {
 	fmt.Println("-------------------------------------------")
 }
 
-func printFileInfo(fi *TFFileInfo) {
+func printFileInfo(fi *tfutils.TFFileInfo) {
 	fmt.Printf("%v\n", *fi)
 }
 
@@ -53,7 +55,7 @@ func main() {
 			absPath = arg
 		}
 
-		NewPathTraverser(
+		tfutils.NewPathTraverser(
 			absPath,
 			recursionDepth,
 			excludeRegex,
