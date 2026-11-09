@@ -11,7 +11,6 @@ import (
 	"github.com/tferguson7337/learning-golang/tfutils"
 )
 
-
 func printHeader(path string) {
 	fmt.Printf("\n%v\n", path)
 	fmt.Println("-------------------------------------------")
